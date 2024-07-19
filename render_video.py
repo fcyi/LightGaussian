@@ -29,7 +29,7 @@ from utils.pose_utils import generate_ellipse_path, generate_spherical_sample_pa
 # import stepfun 
 
 
-
+# 对给定的视角进行渲染
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -83,13 +83,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 #     return focus_pt
 
 
-
-
-
-
-
-
-# xy circular 
+# xy circular，生成一个以views[13]为中心的x、y方向的圆形轨迹，在这条轨迹中相机位姿与views[13]一致
 def render_circular_video(model_path, iteration, views, gaussians, pipeline, background, radius=0.5, n_frames=240): 
     render_path = os.path.join(model_path, 'circular', "ours_{}".format(iteration))
     os.makedirs(render_path, exist_ok=True)
@@ -103,21 +97,18 @@ def render_circular_video(model_path, iteration, views, gaussians, pipeline, bac
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
 
 
-
 def render_video(model_path, iteration, views, gaussians, pipeline, background):
     render_path = os.path.join(model_path, 'video', "ours_{}".format(iteration))
     makedirs(render_path, exist_ok=True)
     view = views[0]
     # render_path_spiral
     # render_path_spherical
-    for idx, pose in enumerate(tqdm(generate_ellipse_path(views,n_frames=600), desc="Rendering progress")):
+    for idx, pose in enumerate(tqdm(generate_ellipse_path(views, n_frames=600), desc="Rendering progress")):
         view.world_view_transform = torch.tensor(getWorld2View2(pose[:3, :3].T, pose[:3, 3], view.trans, view.scale)).transpose(0, 1).cuda()
         view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
         view.camera_center = view.world_view_transform.inverse()[3, :3]
         rendering = render(view, gaussians, pipeline, background)["render"]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-
-
 
 
 def gaussian_render(model_path, iteration, views, gaussians, pipeline, background, args):
@@ -137,7 +128,9 @@ def gaussian_render(model_path, iteration, views, gaussians, pipeline, backgroun
             torchvision.utils.save_image(rendering, os.path.join(sub_path, '{0:05d}'.format(j) + ".png"))
 
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, video: bool, circular:bool, radius: float, args):
+def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams,
+                skip_train: bool, skip_test: bool,
+                video: bool, circular: bool, radius: float, args):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False, load_vq= args.load_vq)
@@ -145,19 +138,24 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
+            render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(),
+                       gaussians, pipeline, background)
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(),
+                       gaussians, pipeline, background)
         if circular:
-            render_circular_video(dataset.model_path, scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,radius)
+            render_circular_video(dataset.model_path, scene.loaded_iter, scene.getTestCameras(),
+                                  gaussians, pipeline, background,radius)
         # by default generate ellipse path, other options include spiral, circular, or other generate_xxx_path function from utils.pose_utils 
         # Modify trajectory function in render_video's enumerate 
         if video:
-            render_video(dataset.model_path, scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
-        #sample virtual view 
+            render_video(dataset.model_path, scene.loaded_iter, scene.getTrainCameras(),
+                         gaussians, pipeline, background)
+        # sample virtual view
         if args.gaussians:
-            gaussian_render(dataset.model_path, scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, args)
+            gaussian_render(dataset.model_path, scene.loaded_iter, scene.getTestCameras(),
+                            gaussians, pipeline, background, args)
 
 
 if __name__ == "__main__":
